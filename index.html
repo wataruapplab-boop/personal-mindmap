@@ -1,0 +1,75 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>マインドマップ</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      background: #f5f6f8;
+      color: #222;
+    }
+    header {
+      padding: 16px;
+      background: white;
+      border-bottom: 1px solid #ddd;
+    }
+    h1 {
+      font-size: 20px;
+      margin: 0;
+    }
+    main {
+      max-width: 760px;
+      margin: 24px auto;
+      padding: 0 16px;
+    }
+    .panel {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .node {
+      display: inline-block;
+      padding: 14px 20px;
+      background: #e8efff;
+      border: 1px solid #a9c0ff;
+      border-radius: 10px;
+      font-weight: bold;
+    }
+    .child {
+      margin: 24px 0 0 36px;
+      padding-left: 20px;
+      border-left: 2px solid #bbb;
+    }
+    .note {
+      color: #666;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>マインドマップ</h1>
+  </header>
+  <main>
+    <div class="panel">
+      <p class="note">試作画面：現在は表示確認用です。</p>
+      <div class="node">マインドマップの中心テーマ</div>
+      <div class="child">
+        <div class="node">アイデア 1</div>
+      </div>
+      <div class="child">
+        <div class="node">アイデア 2</div>
+      </div>
+      <p class="note">
+        この段階では、編集・保存・Google Driveとの同期はまだできません。
+      </p>
+    </div>
+  </main>
+</body>
+</html>
