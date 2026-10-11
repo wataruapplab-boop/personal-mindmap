@@ -2,74 +2,374 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>マインドマップ</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      margin: 0;
-      background: #f5f6f8;
-      color: #222;
-    }
-    header {
-      padding: 16px;
-      background: white;
-      border-bottom: 1px solid #ddd;
-    }
-    h1 {
-      font-size: 20px;
-      margin: 0;
-    }
-    main {
-      max-width: 760px;
-      margin: 24px auto;
-      padding: 0 16px;
-    }
-    .panel {
-      background: white;
-      border: 1px solid #ddd;
-      border-radius: 12px;
-      padding: 20px;
-    }
-    .node {
-      display: inline-block;
-      padding: 14px 20px;
-      background: #e8efff;
-      border: 1px solid #a9c0ff;
-      border-radius: 10px;
-      font-weight: bold;
-    }
-    .child {
-      margin: 24px 0 0 36px;
-      padding-left: 20px;
-      border-left: 2px solid #bbb;
-    }
-    .note {
-      color: #666;
-      font-size: 14px;
-      line-height: 1.7;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>マインドマップ</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0; font-family: sans-serif; color: #202124;
+  background: #f5f6f8;
+}
+header {
+  position: sticky; top: 0; z-index: 5; background: white;
+  padding: 12px 16px; border-bottom: 1px solid #ddd;
+}
+h1 { font-size: 19px; margin: 0 0 10px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 7px; }
+button {
+  border: 1px solid #ccc; border-radius: 8px; background: white;
+  padding: 9px 12px; font-size: 14px; cursor: pointer;
+}
+button:active { background: #e8efff; }
+button:disabled { opacity: .4; }
+#status { font-size: 12px; color: #666; margin-top: 8px; }
+#workspace {
+  overflow: auto; height: calc(100dvh - 116px);
+  padding: 24px; touch-action: pan-x pan-y;
+}
+#tree {
+  display: flex; align-items: center; min-width: max-content;
+  min-height: 100%; padding: 16px;
+}
+.branch {
+  display: flex; flex-direction: column; justify-content: center;
+  position: relative; padding: 8px 0 8px 34px;
+}
+.branch:empty { display: none; }
+.branch > .item { position: relative; }
+.node {
+  display: block; max-width: 260px; min-width: 120px;
+  padding: 11px 14px; margin: 8px 0;
+  border: 1px solid #c4cbd6; border-radius: 10px;
+  background: white; overflow-wrap: anywhere;
+  box-shadow: 0 1px 3px #0000000c; cursor: pointer;
+  user-select: none; -webkit-user-select: none;
+}
+.node.selected { border: 2px solid #3867d6; padding: 10px 13px; background: #edf2ff; }
+.node.dragging { opacity: .45; }
+.node.drop-target { outline: 3px solid #55a66c; }
+.children {
+  display: flex; align-items: stretch; position: relative;
+}
+.children:before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+  border-left: 1px solid #b6bdc8;
+}
+.item { display: flex; align-items: center; position: relative; }
+.item:before {
+  content: ""; position: absolute; left: -34px; width: 34px;
+  border-top: 1px solid #b6bdc8;
+}
+.item:first-child:last-child:before { border-top-color: transparent; }
+.root-node { background: #e5edff; border-color: #9db6f5; font-weight: 600; }
+.hint { color: #666; font-size: 13px; line-height: 1.6; margin: 0 0 14px; }
+@media (max-width: 600px) {
+  #workspace { padding: 12px; }
+  .node { min-width: 105px; max-width: 210px; padding: 10px; }
+  .branch { padding-left: 25px; }
+  .item:before { left: -25px; width: 25px; }
+  button { padding: 9px 10px; }
+}
+</style>
 </head>
 <body>
-  <header>
-    <h1>マインドマップ</h1>
-  </header>
-  <main>
-    <div class="panel">
-      <p class="note">試作画面：現在は表示確認用です。</p>
-      <div class="node">マインドマップの中心テーマ</div>
-      <div class="child">
-        <div class="node">アイデア 1</div>
-      </div>
-      <div class="child">
-        <div class="node">アイデア 2</div>
-      </div>
-      <p class="note">
-        この段階では、編集・保存・Google Driveとの同期はまだできません。
-      </p>
-    </div>
-  </main>
+<header>
+  <h1>マインドマップ</h1>
+  <div class="toolbar">
+    <button id="addSibling">＋ 同階層</button>
+    <button id="addChild">＋ 子階層</button>
+    <button id="editNode">編集</button>
+    <button id="deleteNode">削除</button>
+    <button id="resetMap">初期化</button>
+  </div>
+  <div id="status">準備完了</div>
+</header>
+<main id="workspace">
+  <p class="hint">
+    ノードをタップして選択。Enter：同階層追加／Tab：子階層追加。
+    ノードをドラッグして別のノードに重ねると、親子関係を変更できます。
+  </p>
+  <div id="tree"></div>
+</main>
+<script>
+(() => {
+  const KEY = "personal-mindmap-prototype-v1";
+  let nextId = 1;
+  let selectedId = 1;
+  let dragId = null;
+  let holdTimer = null;
+  let holdTriggered = false;
+
+  const makeNode = (text, children = []) => ({
+    id: nextId++, text, children
+  });
+
+  const defaultMap = () => makeNode("マインドマップの中心テーマ", [
+    makeNode("アイデア 1"),
+    makeNode("アイデア 2")
+  ]);
+
+  function loadMap() {
+    try {
+      const saved = localStorage.getItem(KEY);
+      if (saved) {
+        const data = JSON.parse(saved);
+        if (data && typeof data.id === "number" && Array.isArray(data.children)) {
+          return data;
+        }
+      }
+    } catch (e) {}
+    return defaultMap();
+  }
+
+  let root = loadMap();
+
+  function findNode(id, node = root, parent = null) {
+    if (node.id === id) return { node, parent };
+    for (const child of node.children) {
+      const result = findNode(id, child, node);
+      if (result) return result;
+    }
+    return null;
+  }
+
+  function save() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(root));
+      document.getElementById("status").textContent =
+        "このブラウザに保存済み（Google Drive未接続）";
+    } catch (e) {
+      document.getElementById("status").textContent =
+        "保存できませんでした。ブラウザの保存設定を確認してください。";
+    }
+  }
+
+  function render() {
+    const tree = document.getElementById("tree");
+    const fragment = document.createDocumentFragment();
+
+    function makeBranch(node, isRoot = false) {
+      const branch = document.createElement("div");
+      branch.className = "branch";
+
+      const item = document.createElement("div");
+      item.className = "item";
+
+      const card = document.createElement("div");
+      card.className = "node" + (node.id === selectedId ? " selected" : "");
+      if (isRoot) card.classList.add("root-node");
+      card.textContent = node.text;
+      card.tabIndex = 0;
+      card.draggable = true;
+      card.dataset.id = String(node.id);
+      card.setAttribute("role", "button");
+      card.setAttribute("aria-label", node.text);
+
+      card.addEventListener("click", () => {
+        selectedId = node.id;
+        render();
+      });
+
+      card.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+        selectedId = node.id;
+        editSelected();
+      });
+
+      card.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          selectedId = node.id;
+          addNode("sibling");
+        } else if (event.key === "Tab") {
+          event.preventDefault();
+          selectedId = node.id;
+          addNode(event.shiftKey ? "outdent" : "child");
+        }
+      });
+
+      card.addEventListener("dragstart", (event) => {
+        dragId = node.id;
+        card.classList.add("dragging");
+        if (event.dataTransfer) {
+          event.dataTransfer.setData("text/plain", String(node.id));
+          event.dataTransfer.effectAllowed = "move";
+        }
+      });
+
+      card.addEventListener("dragend", () => {
+        dragId = null;
+        document.querySelectorAll(".node").forEach(el =>
+          el.classList.remove("dragging", "drop-target"));
+      });
+
+      card.addEventListener("dragover", (event) => {
+        if (dragId !== null && dragId !== node.id) {
+          event.preventDefault();
+          card.classList.add("drop-target");
+        }
+      });
+
+      card.addEventListener("dragleave", () => {
+        card.classList.remove("drop-target");
+      });
+
+      card.addEventListener("drop", (event) => {
+        event.preventDefault();
+        card.classList.remove("drop-target");
+        const from = dragId ?? Number(event.dataTransfer?.getData("text/plain"));
+        if (from && from !== node.id) moveNode(from, node.id);
+      });
+
+      let startX = 0, startY = 0;
+      card.addEventListener("pointerdown", (event) => {
+        if (event.pointerType === "mouse") return;
+        holdTriggered = false;
+        startX = event.clientX;
+        startY = event.clientY;
+        clearTimeout(holdTimer);
+        holdTimer = setTimeout(() => {
+          holdTriggered = true;
+          selectedId = node.id;
+          const choice = prompt(
+            "ノードの操作を選んでください：\n1 = 編集\n2 = 同階層を追加\n3 = 子階層を追加\n4 = 削除\n5 = キャンセル",
+            "1"
+          );
+          if (choice === "1") editSelected();
+          if (choice === "2") addNode("sibling");
+          if (choice === "3") addNode("child");
+          if (choice === "4") deleteSelected();
+        }, 650);
+      });
+      card.addEventListener("pointermove", (event) => {
+        if (Math.abs(event.clientX - startX) > 8 ||
+            Math.abs(event.clientY - startY) > 8) clearTimeout(holdTimer);
+      });
+      card.addEventListener("pointerup", () => clearTimeout(holdTimer));
+      card.addEventListener("pointercancel", () => clearTimeout(holdTimer));
+
+      item.appendChild(card);
+      branch.appendChild(item);
+
+      if (node.children.length) {
+        const children = document.createElement("div");
+        children.className = "children";
+        node.children.forEach(child => children.appendChild(makeBranch(child)));
+        branch.appendChild(children);
+      }
+      return branch;
+    }
+
+    fragment.appendChild(makeBranch(root, true));
+    tree.replaceChildren(fragment);
+  }
+
+  function addNode(kind) {
+    const found = findNode(selectedId);
+    if (!found) return;
+    let parent, newNode;
+
+    if (kind === "child") {
+      parent = found.node;
+    } else if (kind === "outdent") {
+      if (!found.parent || found.node.id === root.id) return;
+      const grand = findNode(found.parent.id);
+      if (!grand || !grand.parent) return;
+      parent = grand.parent;
+    } else {
+      parent = found.parent;
+      if (!parent) {
+        alert("中心テーマの同階層には追加できません。子階層を追加してください。");
+        return;
+      }
+    }
+
+    newNode = makeNode("新しいアイデア");
+    parent.children.push(newNode);
+    selectedId = newNode.id;
+    save();
+    render();
+    editSelected();
+  }
+
+  function editSelected() {
+    const found = findNode(selectedId);
+    if (!found) return;
+    const value = prompt("ノードの文字を入力してください", found.node.text);
+    if (value !== null && value.trim()) {
+      found.node.text = value.trim();
+      save();
+      render();
+    }
+  }
+
+  function deleteSelected() {
+    const found = findNode(selectedId);
+    if (!found || !found.parent) {
+      alert("中心テーマは削除できません。");
+      return;
+    }
+    if (!confirm("選択したノードと、その下のノードを削除しますか？")) return;
+    const parent = found.parent;
+    parent.children = parent.children.filter(n => n.id !== selectedId);
+    selectedId = parent.id;
+    save();
+    render();
+  }
+
+  function moveNode(fromId, toId) {
+    if (fromId === root.id) {
+      alert("中心テーマは移動できません。");
+      return;
+    }
+    const from = findNode(fromId);
+    const to = findNode(toId);
+    if (!from || !from.parent || !to) return;
+
+    function contains(node, id) {
+      return node.id === id || node.children.some(child => contains(child, id));
+    }
+    if (contains(from.node, toId)) {
+      alert("自分自身や自分の子ノードの中には移動できません。");
+      return;
+    }
+
+    from.parent.children = from.parent.children.filter(n => n.id !== fromId);
+    to.node.children.push(from.node);
+    selectedId = fromId;
+    save();
+    render();
+  }
+
+  document.getElementById("addSibling").addEventListener("click", () => addNode("sibling"));
+  document.getElementById("addChild").addEventListener("click", () => addNode("child"));
+  document.getElementById("editNode").addEventListener("click", editSelected);
+  document.getElementById("deleteNode").addEventListener("click", deleteSelected);
+
+  document.getElementById("resetMap").addEventListener("click", () => {
+    if (!confirm("このブラウザに保存した試作データを初期化しますか？")) return;
+    root = defaultMap();
+    selectedId = root.id;
+    save();
+    render();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.target.matches("input, textarea")) return;
+    if (event.key === "Enter" && !event.repeat) {
+      event.preventDefault();
+      addNode("sibling");
+    }
+    if (event.key === "Tab") {
+      event.preventDefault();
+      addNode(event.shiftKey ? "outdent" : "child");
+    }
+  });
+
+  save();
+  render();
+})();
+</script>
 </body>
 </html>
